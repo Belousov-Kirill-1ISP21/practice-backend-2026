@@ -15,7 +15,7 @@ class AdminMiddleware
             return response()->json([
                 'error' => [
                     'code' => 'FORBIDDEN',
-                    'message' => 'Доступ запрещен. Требуются права администратора'
+                    'message' => 'Access denied. Admin rights required'
                 ]
             ], 403);
         }

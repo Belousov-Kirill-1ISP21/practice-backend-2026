@@ -12,6 +12,10 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             UserSeeder::class,
             AirportSeeder::class,
+            AircraftSeeder::class,
+            FlightSeeder::class,
+            BookingSeeder::class,    
+            PassengerSeeder::class,  
         ]);
     }
 }

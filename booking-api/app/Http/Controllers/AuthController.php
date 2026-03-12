@@ -15,7 +15,7 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         try {
-            // Получаем данные
+
             $content = $request->getContent();
             $content = mb_convert_encoding($content, 'UTF-8', 'UTF-8');
             $data = json_decode($content, true);
@@ -24,7 +24,6 @@ class AuthController extends Controller
                 $data = $request->all();
             }
             
-            // Валидация обязательных полей
             if (!isset($data['email']) || !isset($data['password']) || 
                 !isset($data['last_name']) || !isset($data['first_name'])) {
                 return response()->json([
@@ -33,7 +32,6 @@ class AuthController extends Controller
                 ], 400, [], JSON_UNESCAPED_UNICODE);
             }
             
-            // Проверяем, существует ли пользователь
             if (User::where('email', $data['email'])->exists()) {
                 return response()->json([
                     'error' => 'EMAIL_EXISTS',
@@ -41,7 +39,6 @@ class AuthController extends Controller
                 ], 409, [], JSON_UNESCAPED_UNICODE);
             }
             
-            // Получаем роль user
             $userRole = Role::where('name', 'user')->first();
             if (!$userRole) {
                 return response()->json([
@@ -50,7 +47,6 @@ class AuthController extends Controller
                 ], 500, [], JSON_UNESCAPED_UNICODE);
             }
             
-            // Создаем пользователя
             $user = User::create([
                 'email' => $data['email'],
                 'password_hash' => Hash::make($data['password']),
@@ -63,7 +59,6 @@ class AuthController extends Controller
                 'birth_date' => $data['birth_date'] ?? null
             ]);
             
-            // Создаем токен
             $token = JWTAuth::fromUser($user);
             
             Log::info('User registered', ['user_id' => $user->id, 'email' => $user->email]);

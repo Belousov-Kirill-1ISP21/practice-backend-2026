@@ -10,9 +10,10 @@ class AirportSeeder extends Seeder
     public function run()
     {
         $airports = [
-            ['code' => 'MOW', 'name' => 'Шереметьево', 'city' => 'Москва', 'country' => 'Россия', 'timezone' => 'Europe/Moscow'],
-            ['code' => 'LED', 'name' => 'Пулково', 'city' => 'Санкт-Петербург', 'country' => 'Россия', 'timezone' => 'Europe/Moscow'],
-            ['code' => 'KZN', 'name' => 'Казань', 'city' => 'Казань', 'country' => 'Россия', 'timezone' => 'Europe/Moscow'],
+            ['code' => 'MOW', 'name' => 'Sheremetyevo', 'city' => 'Moscow', 'country' => 'Russia', 'timezone' => 'Europe/Moscow'],
+            ['code' => 'LED', 'name' => 'Pulkovo', 'city' => 'Saint Petersburg', 'country' => 'Russia', 'timezone' => 'Europe/Moscow'],
+            ['code' => 'KZN', 'name' => 'Kazan', 'city' => 'Kazan', 'country' => 'Russia', 'timezone' => 'Europe/Moscow'],
+            ['code' => 'AER', 'name' => 'Sochi', 'city' => 'Sochi', 'country' => 'Russia', 'timezone' => 'Europe/Moscow'],
         ];
         
         foreach ($airports as $airport) {
