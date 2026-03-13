@@ -15,123 +15,129 @@ class BookingController extends Controller
     /**
      * POST /bookings - Создать новое бронирование
      */
-    /**
- * POST /bookings - Создать новое бронирование
- */
-public function store(Request $request)
-{
-
-    try {
-        $data = json_decode($request->getContent(), true);
-        
-        if (!$data) {
-            $flight_id = $request->input('flight_id') ?? 4;
-            $passengers = $request->input('passengers') ?? [
-                [
-                    'first_name' => $request->input('first_name', 'Иван'),
-                    'last_name' => $request->input('last_name', 'Петров'),
-                    'birth_date' => $request->input('birth_date', '1990-01-01'),
-                    'passport_number' => $request->input('passport_number', '1234567890'),
-                    'seat_number' => $request->input('seat_number', '12A')
-                ]
-            ];
+    public function store(Request $request)
+    {
+        try {
+            $data = json_decode($request->getContent(), true);
             
-            $data = [
-                'flight_id' => $flight_id,
-                'passengers' => $passengers
-            ];
-        }
-        
-        $validator = \Validator::make($data, [
-            'flight_id' => 'required|exists:flights,id',
-            'passengers' => 'required|array|min:1|max:9',
-            'passengers.*.first_name' => 'required|string|max:100',
-            'passengers.*.last_name' => 'required|string|max:100',
-            'passengers.*.middle_name' => 'nullable|string|max:100',
-            'passengers.*.birth_date' => 'nullable|date',
-            'passengers.*.passport_number' => 'nullable|string|max:20',
-            'passengers.*.seat_number' => 'nullable|string|max:5'
-        ]);
+            if (!$data) {
+                return response()->json([
+                    'error' => 'INVALID_JSON',
+                    'message' => 'Invalid JSON format'
+                ], 400);
+            }
+            
+            $validator = \Validator::make($data, [
+                'flight_id' => 'required|exists:flights,id',
+                'passengers' => 'required|array|min:1|max:9',
+                'passengers.*.first_name' => 'required|string|max:100',
+                'passengers.*.last_name' => 'required|string|max:100',
+                'passengers.*.middle_name' => 'nullable|string|max:100',
+                'passengers.*.birth_date' => 'nullable|date',
+                'passengers.*.passport_number' => 'nullable|string|max:20',
+                'passengers.*.seat_number' => 'nullable|string|max:5'
+            ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'error' => 'VALIDATION_ERROR',
-                'message' => $validator->errors()
-            ], 422, [], JSON_UNESCAPED_UNICODE);
-        }
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'VALIDATION_ERROR',
+                    'message' => $validator->errors()
+                ], 422, [], JSON_UNESCAPED_UNICODE);
+            }
 
-        $validated = $validator->validated();
-        
-        $flight = Flight::with('aircraft')->find($validated['flight_id']);
-        
-        if (!$flight) {
+            $validated = $validator->validated();
+            
+            $flight = Flight::with('aircraft')->find($validated['flight_id']);
+            
+            if (!$flight) {
+                return response()->json([
+                    'error' => 'FLIGHT_NOT_FOUND',
+                    'message' => 'Рейс с указанным ID не найден'
+                ], 404, [], JSON_UNESCAPED_UNICODE);
+            }
+            
+            if ($flight->status !== 'scheduled') {
+                return response()->json([
+                    'error' => 'FLIGHT_NOT_AVAILABLE',
+                    'message' => 'Рейс недоступен для бронирования'
+                ], 409, [], JSON_UNESCAPED_UNICODE);
+            }
+
+            $availableSeats = $this->getAvailableSeatsCount($flight);
+
+            $existingBooking = Booking::where('user_id', auth()->id())
+            ->where('flight_id', $validated['flight_id'])
+            ->whereIn('status', ['pending', 'confirmed'])
+            ->first();
+
+            if ($existingBooking) {
             return response()->json([
-                'error' => 'FLIGHT_NOT_FOUND',
-                'message' => 'Рейс с указанным ID не найден'
-            ], 404, [], JSON_UNESCAPED_UNICODE);
-        }
-        
-        if ($flight->status !== 'scheduled') {
-            return response()->json([
-                'error' => 'FLIGHT_NOT_AVAILABLE',
-                'message' => 'Рейс недоступен для бронирования'
+                'error' => 'DUPLICATE_BOOKING',
+                'message' => 'У вас уже есть бронирование на этот рейс'
             ], 409, [], JSON_UNESCAPED_UNICODE);
-        }
-
-        $availableSeats = $this->getAvailableSeatsCount($flight);
-        if (count($validated['passengers']) > $availableSeats) {
-            return response()->json([
-                'error' => 'NOT_ENOUGH_SEATS',
-                'message' => "Недостаточно мест. Доступно: {$availableSeats}"
-            ], 409, [], JSON_UNESCAPED_UNICODE);
-        }
-
-        if ($this->areSeatsTaken($flight->id, $validated['passengers'])) {
-            return response()->json([
-                'error' => 'SEATS_TAKEN',
-                'message' => 'Некоторые выбранные места уже заняты'
-            ], 409, [], JSON_UNESCAPED_UNICODE);
-        }
-
-        $booking = Booking::create([
-            'user_id' => auth()->id(),
-            'flight_id' => $flight->id,
-            'code' => $this->generateBookingCode(),
-            'status' => 'pending',
-            'expires_at' => Carbon::now()->addMinutes(30),
-            'total_price' => $flight->base_price * count($validated['passengers']),
-            'payment_status' => 'pending'
-        ]);
-
-        foreach ($validated['passengers'] as $passengerData) {
-            $passengerData['ticket_price'] = $flight->base_price;
-            $booking->passengers()->create($passengerData);
-        }
-
-        Log::info('Booking created', [
-            'user_id' => auth()->id(),
-            'booking_id' => $booking->id,
-            'code' => $booking->code
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'booking' => $booking->load('passengers'),
-                'expires_at' => $booking->expires_at,
-                'minutes_to_pay' => 30
-            ],
-            'message' => 'Бронирование создано. Оплатите в течение 30 минут.'
-        ], 201, [], JSON_UNESCAPED_UNICODE);
-
-    } catch (\Exception $e) {
-        Log::error('Booking store error: ' . $e->getMessage());
-        return response()->json([
-            'error' => 'SERVER_ERROR',
-            'message' => 'Внутренняя ошибка сервера'
-        ], 500, [], JSON_UNESCAPED_UNICODE);
-    }
 }
+            
+            // Проверка наличия мест
+            if ($availableSeats <= 0) {
+                return response()->json([
+                    'error' => 'NO_SEATS',
+                    'message' => 'На рейсе нет свободных мест'
+                ], 409, [], JSON_UNESCAPED_UNICODE);
+            }
+            
+            if (count($validated['passengers']) > $availableSeats) {
+                return response()->json([
+                    'error' => 'NOT_ENOUGH_SEATS',
+                    'message' => "Недостаточно мест. Доступно: {$availableSeats}"
+                ], 409, [], JSON_UNESCAPED_UNICODE);
+            }
+
+            if ($this->areSeatsTaken($flight->id, $validated['passengers'])) {
+                return response()->json([
+                    'error' => 'SEATS_TAKEN',
+                    'message' => 'Некоторые выбранные места уже заняты'
+                ], 409, [], JSON_UNESCAPED_UNICODE);
+            }
+
+            $booking = Booking::create([
+                'user_id' => auth()->id(),
+                'flight_id' => $flight->id,
+                'code' => $this->generateBookingCode(),
+                'status' => 'pending',
+                'expires_at' => Carbon::now()->addMinutes(30),
+                'total_price' => $flight->base_price * count($validated['passengers']),
+                'payment_status' => 'pending'
+            ]);
+
+            foreach ($validated['passengers'] as $passengerData) {
+                $passengerData['ticket_price'] = $flight->base_price;
+                $booking->passengers()->create($passengerData);
+            }
+
+            Log::info('Booking created', [
+                'user_id' => auth()->id(),
+                'booking_id' => $booking->id,
+                'code' => $booking->code
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'booking' => $booking->load('passengers'),
+                    'expires_at' => $booking->expires_at,
+                    'minutes_to_pay' => 30
+                ],
+                'message' => 'Бронирование создано. Оплатите в течение 30 минут.'
+            ], 201, [], JSON_UNESCAPED_UNICODE);
+
+        } catch (\Exception $e) {
+            Log::error('Booking store error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'SERVER_ERROR',
+                'message' => 'Внутренняя ошибка сервера'
+            ], 500, [], JSON_UNESCAPED_UNICODE);
+        }
+    }
 
     /**
      * GET /bookings/{id} - Получить детали бронирования
@@ -165,7 +171,7 @@ public function store(Request $request)
     }
 
     /**
-     * POST /bookings/{id}/cancel - Отменить бронирование
+     * POST /bookings/{id}/cancel - Отменить бронирование (пользователь)
      */
     public function cancel($id)
     {
@@ -203,7 +209,7 @@ public function store(Request $request)
                 'payment_status' => $booking->payment_status === 'paid' ? 'refunded' : 'pending'
             ]);
 
-            Log::info('Booking cancelled', [
+            Log::info('Booking cancelled by user', [
                 'user_id' => auth()->id(),
                 'booking_id' => $booking->id
             ]);
@@ -215,6 +221,46 @@ public function store(Request $request)
 
         } catch (\Exception $e) {
             Log::error('Booking cancel error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'SERVER_ERROR',
+                'message' => 'Внутренняя ошибка сервера'
+            ], 500, [], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    /**
+     * POST /admin/bookings/{id}/cancel - Отменить бронирование (админ)
+     */
+    public function adminCancel($id)
+    {
+        try {
+            $booking = Booking::find($id);
+
+            if (!$booking) {
+                return response()->json([
+                    'error' => 'NOT_FOUND',
+                    'message' => 'Бронирование не найдено'
+                ], 404, [], JSON_UNESCAPED_UNICODE);
+            }
+
+            $booking->update([
+                'status' => 'cancelled',
+                'payment_status' => $booking->payment_status === 'paid' ? 'refunded' : 'pending'
+            ]);
+
+            Log::info('Booking cancelled by admin', [
+                'admin_id' => auth()->id(),
+                'booking_id' => $booking->id,
+                'user_id' => $booking->user_id
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Бронирование успешно отменено администратором'
+            ], 200, [], JSON_UNESCAPED_UNICODE);
+
+        } catch (\Exception $e) {
+            Log::error('Admin booking cancel error: ' . $e->getMessage());
             return response()->json([
                 'error' => 'SERVER_ERROR',
                 'message' => 'Внутренняя ошибка сервера'
@@ -302,27 +348,30 @@ public function store(Request $request)
     }
 
     /**
- * GET /bookings/my - Получить свои бронирования
- */
-public function myBookings(Request $request)
-{
-    try {
-        $bookings = Booking::where('user_id', auth()->id())->get();
-        
-        return response()->json([
-            'success' => true,
-            'data' => $bookings
-        ], 200, [], JSON_UNESCAPED_UNICODE);
+     * GET /bookings/my - Получить свои бронирования
+     */
+    public function myBookings(Request $request)
+    {
+        try {
+            $bookings = Booking::where('user_id', auth()->id())
+                ->with(['flight.origin', 'flight.destination', 'passengers'])
+                ->orderBy('created_at', 'desc')
+                ->paginate($request->get('per_page', 15));
+            
+            return response()->json([
+                'success' => true,
+                'data' => $bookings
+            ], 200, [], JSON_UNESCAPED_UNICODE);
 
-    } catch (\Exception $e) {
-        return response()->json([
-            'error' => 'SERVER_ERROR',
-            'message' => $e->getMessage(),
-            'file' => $e->getFile(),
-            'line' => $e->getLine()
-        ], 500);
+        } catch (\Exception $e) {
+            Log::error('My bookings error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'SERVER_ERROR',
+                'message' => 'Внутренняя ошибка сервера'
+            ], 500);
+        }
     }
-}
+
     /**
      * GET /admin/bookings - Получить все бронирования (только админ)
      */

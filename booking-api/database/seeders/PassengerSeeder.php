@@ -44,7 +44,7 @@ class PassengerSeeder extends Seeder
         ];
         
         foreach ($passengers as $passenger) {
-            Passenger::create($passenger);
+            Passenger::firstOrCreate($passenger);
         }
     }
 }

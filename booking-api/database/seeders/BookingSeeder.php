@@ -50,7 +50,7 @@ class BookingSeeder extends Seeder
         ];
         
         foreach ($bookings as $booking) {
-            Booking::create($booking);
+            Booking::firstOrCreate($booking);
         }
     }
 }

@@ -6,7 +6,7 @@ use App\Http\Controllers\FlightController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\AirportController;
 use App\Http\Controllers\AircraftController;
-
+use App\Http\Controllers\ReviewController;
 
 Route::post('auth/register', [AuthController::class, 'register']);
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -15,11 +15,13 @@ Route::middleware('auth:api')->group(function () {
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::post('auth/logout', [AuthController::class, 'logout']);
     
+    Route::get('flights/available', [FlightController::class, 'available']);
+    Route::get('flights/schedule', [FlightController::class, 'schedule']);
     Route::get('flights', [FlightController::class, 'index']);
     Route::get('flights/{id}', [FlightController::class, 'show']);
     
-    Route::post('bookings', [BookingController::class, 'store']);
     Route::get('bookings/my', [BookingController::class, 'myBookings']);
+    Route::post('bookings', [BookingController::class, 'store']);
     Route::get('bookings/{id}', [BookingController::class, 'show']);
     Route::post('bookings/{id}/cancel', [BookingController::class, 'cancel']);
     Route::post('bookings/{id}/pay', [BookingController::class, 'pay']);
@@ -28,8 +30,10 @@ Route::middleware('auth:api')->group(function () {
     
     Route::get('aircrafts', [AircraftController::class, 'index']);
     
+    Route::get('flights/{id}/reviews', [ReviewController::class, 'index']);
+    Route::post('flights/{id}/reviews', [ReviewController::class, 'store']);
+    
     Route::middleware('admin')->group(function () {
-
         Route::post('flights', [FlightController::class, 'store']);
         Route::put('flights/{id}', [FlightController::class, 'update']);
         Route::delete('flights/{id}', [FlightController::class, 'destroy']);
@@ -44,5 +48,6 @@ Route::middleware('auth:api')->group(function () {
         
         Route::get('admin/bookings', [BookingController::class, 'index']);
         Route::get('admin/bookings/{id}', [BookingController::class, 'adminShow']);
+        Route::post('admin/bookings/{id}/cancel', [BookingController::class, 'adminCancel']);
     });
 });

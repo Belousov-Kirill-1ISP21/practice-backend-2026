@@ -87,10 +87,23 @@ return new class extends Migration
             $table->string('seat_number', 5)->nullable();
             $table->decimal('ticket_price', 10, 2);
         });
+
+        // 8. Отзывы
+        Schema::create('reviews', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->foreignId('flight_id')->constrained('flights')->onDelete('cascade');
+            $table->foreignId('booking_id')->constrained('bookings')->onDelete('cascade')->unique();
+            $table->tinyInteger('rating')->unsigned();
+            $table->text('comment')->nullable();
+            $table->timestamps();
+            $table->unique(['user_id', 'booking_id']);
+        });
     }
 
     public function down(): void
     {
+        Schema::dropIfExists('reviews');
         Schema::dropIfExists('passengers');
         Schema::dropIfExists('bookings');
         Schema::dropIfExists('flights');

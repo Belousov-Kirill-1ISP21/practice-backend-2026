@@ -9,10 +9,10 @@ use Illuminate\Support\Facades\Log;
 class AirportController extends Controller
 {
     /**
-     * GET /airports - Получить список всех аэропортов
-     */
+    * GET /airports - Получить список всех аэропортов
+    */
     public function index(Request $request)
-    {
+{
         try {
             $query = Airport::query();
             
@@ -20,8 +20,8 @@ class AirportController extends Controller
                 $search = $request->search;
                 $query->where(function($q) use ($search) {
                     $q->where('city', 'LIKE', "%{$search}%")
-                      ->orWhere('code', 'LIKE', "%{$search}%")
-                      ->orWhere('name', 'LIKE', "%{$search}%");
+                    ->orWhere('code', 'LIKE', "%{$search}%")
+                    ->orWhere('name', 'LIKE', "%{$search}%");
                 });
             }
             
@@ -29,7 +29,8 @@ class AirportController extends Controller
                 $query->where('country', $request->country);
             }
             
-            $airports = $query->orderBy('city')->get();
+            $perPage = $request->get('per_page', 15);
+            $airports = $query->orderBy('city')->paginate($perPage);
             
             return response()->json([
                 'success' => true,
@@ -43,7 +44,7 @@ class AirportController extends Controller
                 'message' => 'Внутренняя ошибка сервера'
             ], 500, [], JSON_UNESCAPED_UNICODE);
         }
-    }
+}
 
     /**
      * POST /airports - Создать новый аэропорт (только админ)

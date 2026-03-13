@@ -15,24 +15,36 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         try {
-
-            $content = $request->getContent();
-            $content = mb_convert_encoding($content, 'UTF-8', 'UTF-8');
-            $data = json_decode($content, true);
+            $data = json_decode($request->getContent(), true);
             
             if (!$data) {
-                $data = $request->all();
+                return response()->json([
+                    'error' => 'INVALID_JSON',
+                    'message' => 'Invalid JSON format'
+                ], 400);
             }
             
-            if (!isset($data['email']) || !isset($data['password']) || 
-                !isset($data['last_name']) || !isset($data['first_name'])) {
+            $validator = \Validator::make($data, [
+                'email' => 'required|email|max:255',
+                'password' => 'required|string|min:8|max:255',
+                'last_name' => 'required|string|max:100',
+                'first_name' => 'required|string|max:100',
+                'middle_name' => 'nullable|string|max:100',
+                'phone' => 'nullable|string|max:20',
+                'passport_number' => 'nullable|string|max:20',
+                'birth_date' => 'nullable|date'
+            ]);
+
+            if ($validator->fails()) {
                 return response()->json([
                     'error' => 'VALIDATION_ERROR',
-                    'message' => 'Обязательные поля: email, password, last_name, first_name'
-                ], 400, [], JSON_UNESCAPED_UNICODE);
+                    'message' => $validator->errors()
+                ], 422, [], JSON_UNESCAPED_UNICODE);
             }
+
+            $validated = $validator->validated();
             
-            if (User::where('email', $data['email'])->exists()) {
+            if (User::where('email', $validated['email'])->exists()) {
                 return response()->json([
                     'error' => 'EMAIL_EXISTS',
                     'message' => 'Пользователь с таким email уже существует'
@@ -48,15 +60,15 @@ class AuthController extends Controller
             }
             
             $user = User::create([
-                'email' => $data['email'],
-                'password_hash' => Hash::make($data['password']),
+                'email' => $validated['email'],
+                'password_hash' => Hash::make($validated['password']),
                 'role_id' => $userRole->id,
-                'last_name' => $data['last_name'],
-                'first_name' => $data['first_name'],
-                'middle_name' => $data['middle_name'] ?? null,
-                'phone' => $data['phone'] ?? null,
-                'passport_number' => $data['passport_number'] ?? null,
-                'birth_date' => $data['birth_date'] ?? null
+                'last_name' => $validated['last_name'],
+                'first_name' => $validated['first_name'],
+                'middle_name' => $validated['middle_name'] ?? null,
+                'phone' => $validated['phone'] ?? null,
+                'passport_number' => $validated['passport_number'] ?? null,
+                'birth_date' => $validated['birth_date'] ?? null
             ]);
             
             $token = JWTAuth::fromUser($user);
@@ -90,9 +102,11 @@ class AuthController extends Controller
     public function login(LoginRequest $request)
     {
         try {
-            $user = User::where('email', $request->email)->first();
+            $validated = $request->validated();
             
-            if (!$user || !Hash::check($request->password, $user->password_hash)) {
+            $user = User::where('email', $validated['email'])->first();
+            
+            if (!$user || !Hash::check($validated['password'], $user->password_hash)) {
                 return response()->json([
                     'error' => [
                         'code' => 'INVALID_CREDENTIALS',
@@ -129,14 +143,24 @@ class AuthController extends Controller
         $user = auth()->user();
         
         if (!$user) {
-            return response()->json(['error' => 'Not authenticated'], 401);
+            return response()->json([
+                'error' => 'UNAUTHORIZED',
+                'message' => 'Не авторизован'
+            ], 401, [], JSON_UNESCAPED_UNICODE);
         }
         
         return response()->json([
-            'id' => $user->id,
-            'email' => $user->email,
-            'role_id' => $user->role_id
-        ]);
+            'success' => true,
+            'data' => [
+                'id' => $user->id,
+                'email' => $user->email,
+                'last_name' => $user->last_name,
+                'first_name' => $user->first_name,
+                'middle_name' => $user->middle_name,
+                'phone' => $user->phone,
+                'role' => $user->role->name
+            ]
+        ], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function logout()

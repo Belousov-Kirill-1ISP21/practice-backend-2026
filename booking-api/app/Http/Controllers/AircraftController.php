@@ -20,7 +20,7 @@ class AircraftController extends Controller
                 $search = $request->search;
                 $query->where(function($q) use ($search) {
                     $q->where('model', 'LIKE', "%{$search}%")
-                      ->orWhere('manufacturer', 'LIKE', "%{$search}%");
+                    ->orWhere('manufacturer', 'LIKE', "%{$search}%");
                 });
             }
             
@@ -32,7 +32,10 @@ class AircraftController extends Controller
                 $query->where('total_seats', '<=', $request->max_seats);
             }
             
-            $aircrafts = $query->withCount('flights')->orderBy('model')->get();
+            $perPage = $request->get('per_page', 15);
+            $aircrafts = $query->withCount('flights')
+                ->orderBy('model')
+                ->paginate($perPage);
             
             return response()->json([
                 'success' => true,

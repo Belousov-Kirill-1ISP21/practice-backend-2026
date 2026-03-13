@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
             FlightSeeder::class,
             BookingSeeder::class,    
             PassengerSeeder::class,  
+            ReviewSeeder::class,
         ]);
     }
 }

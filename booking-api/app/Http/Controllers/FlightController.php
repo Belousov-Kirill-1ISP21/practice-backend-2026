@@ -51,10 +51,13 @@ class FlightController extends Controller
             $sortOrder = $request->get('sort_order', 'asc');
             $query->orderBy($sortBy, $sortOrder);
             
-            $flights = $query->get();
+            $perPage = $request->get('per_page', 15);
+            $flights = $query->paginate($perPage);
             
             foreach ($flights as $flight) {
                 $flight->available_seats = $this->getAvailableSeatsCount($flight);
+                $flight->average_rating = $flight->reviews()->avg('rating') ?: 0;
+                $flight->reviews_count = $flight->reviews()->count();
             }
             
             return response()->json([
@@ -87,6 +90,8 @@ class FlightController extends Controller
             }
             
             $flight->available_seats = $this->getAvailableSeatsCount($flight);
+            $flight->average_rating = $flight->reviews()->avg('rating') ?: 0;
+            $flight->reviews_count = $flight->reviews()->count();
             
             return response()->json([
                 'success' => true,
@@ -233,6 +238,125 @@ class FlightController extends Controller
             
         } catch (\Exception $e) {
             Log::error('Flight destroy error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'SERVER_ERROR',
+                'message' => 'Внутренняя ошибка сервера'
+            ], 500, [], JSON_UNESCAPED_UNICODE);
+        }
+    }
+
+    /**
+ * GET /flights/available - Поиск свободных рейсов
+ */
+public function available(Request $request)
+{
+    try {
+        $query = Flight::with(['origin', 'destination', 'aircraft'])
+            ->where('status', 'scheduled');
+        
+        if ($request->has('date')) {
+            $date = Carbon::parse($request->date);
+            $query->whereDate('departure_time', $date);
+        }
+        
+        if ($request->has('from_date') && $request->has('to_date')) {
+            $from = Carbon::parse($request->from_date)->startOfDay();
+            $to = Carbon::parse($request->to_date)->endOfDay();
+            $query->whereBetween('departure_time', [$from, $to]);
+        }
+        
+        if ($request->has('departure_city')) {
+            $query->whereHas('origin', function($q) use ($request) {
+                $q->where('city', 'LIKE', '%' . $request->departure_city . '%');
+            });
+        }
+        
+        if ($request->has('arrival_city')) {
+            $query->whereHas('destination', function($q) use ($request) {
+                $q->where('city', 'LIKE', '%' . $request->arrival_city . '%');
+            });
+        }
+        
+        if ($request->has('min_price')) {
+            $query->where('base_price', '>=', $request->min_price);
+        }
+        
+        if ($request->has('max_price')) {
+            $query->where('base_price', '<=', $request->max_price);
+        }
+        
+        $flights = $query->get();
+
+        // Добавим логирование для отладки
+        \Log::info('Available flights query', [
+            'sql' => $query->toSql(),
+            'bindings' => $query->getBindings(),
+            'count' => $flights->count(),
+            'date' => $request->date
+        ]);
+
+        $result = [];
+        foreach ($flights as $flight) {
+            $available = $this->getAvailableSeatsCount($flight);
+            
+            if ($request->has('min_available_seats') && $available < $request->min_available_seats) {
+                continue;
+            }
+            
+            $flight->available_seats = $available;
+            $flight->average_rating = $flight->reviews()->avg('rating') ?: 0;
+            $result[] = $flight;
+        }
+
+        // ВСЕГДА возвращаем 200, даже если результат пустой
+        return response()->json([
+            'success' => true,
+            'data' => $result
+        ], 200, [], JSON_UNESCAPED_UNICODE);
+        
+    } catch (\Exception $e) {
+        Log::error('Flight available error: ' . $e->getMessage());
+        return response()->json([
+            'error' => 'SERVER_ERROR',
+            'message' => 'Внутренняя ошибка сервера'
+        ], 500, [], JSON_UNESCAPED_UNICODE);
+    }
+}
+
+    /**
+     * GET /flights/schedule - Расписание рейсов на день/неделю
+     */
+    public function schedule(Request $request)
+    {
+        try {
+            $query = Flight::with(['origin', 'destination', 'aircraft'])
+                ->where('status', 'scheduled');
+            
+            if ($request->has('date')) {
+                $date = Carbon::parse($request->date);
+                $query->whereDate('departure_time', $date);
+            }
+            
+            if ($request->has('week')) {
+                $startOfWeek = Carbon::parse($request->week)->startOfWeek();
+                $endOfWeek = Carbon::parse($request->week)->endOfWeek();
+                $query->whereBetween('departure_time', [$startOfWeek, $endOfWeek]);
+            }
+            
+            $flights = $query->orderBy('departure_time')->get();
+            
+            foreach ($flights as $flight) {
+                $flight->available_seats = $this->getAvailableSeatsCount($flight);
+                $flight->average_rating = $flight->reviews()->avg('rating') ?: 0;
+            }
+            
+            return response()->json([
+                'success' => true,
+                'data' => $flights
+            ], 200, [], JSON_UNESCAPED_UNICODE);
+            
+        } catch (\Exception $e) {
+            Log::error('Flight schedule error: ' . $e->getMessage());
             return response()->json([
                 'error' => 'SERVER_ERROR',
                 'message' => 'Внутренняя ошибка сервера'
