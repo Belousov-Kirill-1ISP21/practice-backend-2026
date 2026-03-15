@@ -44,7 +44,10 @@ class PassengerSeeder extends Seeder
         ];
         
         foreach ($passengers as $passenger) {
-            Passenger::firstOrCreate($passenger);
+            Passenger::firstOrCreate([
+                'booking_id' => $passenger['booking_id'],
+                'passport_number' => $passenger['passport_number'] 
+            ], $passenger);
         }
     }
 }

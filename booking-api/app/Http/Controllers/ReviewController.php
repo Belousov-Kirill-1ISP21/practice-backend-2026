@@ -41,10 +41,10 @@ class ReviewController extends Controller
                 ], 409);
             }
 
-            if (Carbon::parse($booking->flight->departure_time)->isFuture()) {
+            if ($booking->flight->status !== 'arrived') {
                 return response()->json([
-                    'error' => 'TOO_EARLY',
-                    'message' => 'Отзыв можно оставить только после завершения рейса'
+                    'error' => 'FLIGHT_NOT_COMPLETED',
+                    'message' => 'Отзыв можно оставить только после завершения рейса (статус arrived)'
                 ], 409);
             }
 

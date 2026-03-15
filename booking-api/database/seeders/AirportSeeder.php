@@ -17,7 +17,10 @@ class AirportSeeder extends Seeder
         ];
         
         foreach ($airports as $airport) {
-            Airport::firstOrCreate($airport);
+            Airport::firstOrCreate(
+                ['code' => $airport['code']], 
+                $airport
+            );
         }
     }
 }

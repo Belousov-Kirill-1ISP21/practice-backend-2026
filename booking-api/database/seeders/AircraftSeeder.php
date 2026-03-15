@@ -28,7 +28,10 @@ class AircraftSeeder extends Seeder
         ];
         
         foreach ($aircrafts as $aircraft) {
-            Aircraft::firstOrCreate($aircraft);
+            Aircraft::firstOrCreate(
+                ['model' => $aircraft['model']], 
+                $aircraft
+            );
         }
     }
 }

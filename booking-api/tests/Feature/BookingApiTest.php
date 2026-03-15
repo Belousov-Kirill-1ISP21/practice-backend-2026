@@ -604,34 +604,26 @@ class BookingApiTest extends TestCase
     {
         $token = $this->getUserToken();
         
-        // Создаём бронирование
-        $bookingResponse = $this->withHeader('Authorization', "Bearer $token")
-            ->postJson('/api/bookings', [
-                'flight_id' => 4,
-                'passengers' => [
-                    [
-                        'first_name' => 'Ivan',
-                        'last_name' => 'Petrov',
-                        'birth_date' => '1990-01-01',
-                        'passport_number' => '1234567890',
-                        'seat_number' => '12A'
-                    ]
-                ]
-            ]);
+        // Получаем пользователя
+        $user = User::where('email', 'user@example.com')->first();
         
-        $bookingId = $bookingResponse->json('data.booking.id');
-
-        // Оплачиваем
-        $this->withHeader('Authorization', "Bearer $token")
-            ->postJson("/api/bookings/{$bookingId}/pay", [
-                'payment_method' => 'card',
-                'card_number' => '4111111111111111'
-            ]);
-
+        // Находим подтверждённое бронирование
+        $booking = Booking::where('user_id', $user->id)
+            ->where('status', 'confirmed')
+            ->whereHas('flight', function($q) {
+                $q->where('flight_number', 'SU999');
+            })
+            ->first();
+        
+        // Если нет в базе - пропускаем
+        if (!$booking) {
+            $this->markTestSkipped('Нет бронирования на рейс SU999. Запусти сиды заново.');
+        }
+        
         // Добавляем отзыв
         $response = $this->withHeader('Authorization', "Bearer $token")
-            ->postJson('/api/flights/4/reviews', [
-                'booking_id' => $bookingId,
+            ->postJson("/api/flights/{$booking->flight_id}/reviews", [
+                'booking_id' => $booking->id,
                 'rating' => 5,
                 'comment' => 'Great flight, on time'
             ]);
